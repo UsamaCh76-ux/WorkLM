@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorkLM — Research Paper Assistant</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Times New Roman', Times, serif;
+      background: #fff;
+      color: #111;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    #header {
+      background: #b31b1b;
+      color: white;
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #8a1212;
+      flex-shrink: 0;
+      gap: 12px;
+    }
+
+    #logo {
+      font-size: 21px;
+      font-weight: bold;
+      letter-spacing: -0.5px;
+      white-space: nowrap;
+    }
+    #logo em { font-style: italic; }
+
+    #api-section {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    #api-label { color: rgba(255,255,255,.82); font-size: 12px; white-space: nowrap; font-family: Arial, sans-serif; }
+
+    #api-key-input {
+      padding: 4px 8px;
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 3px;
+      font-size: 12px;
+      width: 260px;
+      font-family: 'Courier New', monospace;
+      background: rgba(255,255,255,.12);
+      color: white;
+    }
+    #api-key-input::placeholder { color: rgba(255,255,255,.45); }
+    #api-key-input:focus { outline: none; border-color: rgba(255,255,255,.7); background: rgba(255,255,255,.18); }
+
+    #connect-btn {
+      padding: 4px 11px;
+      background: white;
+      color: #b31b1b;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      white-space: nowrap;
+    }
+    #connect-btn:hover { background: #f0f0f0; }
+
+    #api-indicator {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #e05050;
+      border: 2px solid rgba(255,255,255,.5);
+      flex-shrink: 0;
+      transition: background .35s;
+    }
+    #api-indicator.on { background: #50d050; }
+
+    /* ── LAYOUT ── */
+    #main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── LEFT SIDEBAR ── */
+    #left-sidebar {
+      width: 228px;
+      border-right: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      background: #f8f7f5;
+      flex-shrink: 0;
+    }
+
+    .sb-head {
+      padding: 9px 11px;
+      background: #ece9e3;
+      border-bottom: 1px solid #ccc;
+      font-size: 12px;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #upload-btn {
+      padding: 3px 8px;
+      background: #b31b1b;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: Arial, sans-serif;
+    }
+    #upload-btn:hover { background: #8a1212; }
+    #file-input { display: none; }
+
+    #doc-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 7px;
+    }
+
+    #no-docs {
+      padding: 22px 12px;
+      text-align: center;
+      color: #999;
+      font-size: 12px;
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    .doc-item {
+      padding: 7px 9px;
+      margin-bottom: 5px;
+      background: white;
+      border: 1px solid #d5d2cb;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      transition: border-color .15s;
+    }
+    .doc-item:hover { border-color: #b31b1b; }
+    .doc-item.active { border-color: #b31b1b; background: #fff6f6; }
+
+    .doc-icon { color: #b31b1b; font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+    .doc-info { flex: 1; min-width: 0; font-family: Arial, sans-serif; }
+    .doc-name { font-weight: bold; word-break: break-word; line-height: 1.3; font-size: 11px; }
+    .doc-meta { color: #888; font-size: 10px; margin-top: 2px; }
+    .doc-status { color: #b31b1b; font-size: 10px; }
+
+    .doc-del {
+      color: #bbb;
+      cursor: pointer;
+      font-size: 13px;
+      flex-shrink: 0;
+      line-height: 1;
+      padding: 1px 2px;
+    }
+    .doc-del:hover { color: #b31b1b; }
+
+    .doc-progress {
+      height: 2px;
+      background: #e0e0e0;
+      border-radius: 1px;
+      margin-top: 4px;
+    }
+    .doc-progress-fill {
+      height: 100%;
+      background: #b31b1b;
+      border-radius: 1px;
+      transition: width .2s;
+    }
+
+    /* ── TOOLS ── */
+    #tools {
+      padding: 8px;
+      border-top: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .tool-btn {
+      padding: 6px 9px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: Arial, sans-serif;
+      text-align: left;
+      transition: border-color .15s, color .15s;
+    }
+    .tool-btn:hover { border-color: #b31b1b; color: #b31b1b; }
+
+    /* ── CENTER VIEWER ── */
+    #center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #525659;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    #viewer-bar {
+      padding: 5px 10px;
+      background: #3a3a3c;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .vbar-btn {
+      padding: 3px 8px;
+      background: #555;
+      color: #ddd;
+      border: 1px solid #666;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: Arial, sans-serif;
+    }
+    .vbar-btn:hover { background: #6a6a6a; color: white; border-color: #888; }
+
+    #page-info, #zoom-label {
+      color: #ccc;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      white-space: nowrap;
+    }
+
+    #pdf-scroll {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 18px;
+      gap: 10px;
+    }
+
+    .pdf-canvas-wrap {
+      box-shadow: 0 2px 12px rgba(0,0,0,.6);
+      line-height: 0;
+    }
+
+    #empty-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      color: #aaa;
+      text-align: center;
+      font-family: Arial, sans-serif;
+    }
+
+    /* ── RIGHT SIDEBAR ── */
+    #right-sidebar {
+      width: 310px;
+      border-left: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      flex-shrink: 0;
+    }
+
+    #chat-head {
+      padding: 9px 11px;
+      background: #ece9e3;
+      border-bottom: 1px solid #ccc;
+      font-size: 12px;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+    }
+
+    #chat-msgs {
+      flex: 1;
+      overflow-y: auto;
+      padding: 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .msg {
+      max-width: 92%;
+      padding: 7px 9px;
+      border-radius: 5px;
+      font-size: 12.5px;
+      line-height: 1.5;
+      word-break: break-word;
+      font-family: Arial, sans-serif;
+    }
+
+    .msg.user {
+      background: #b31b1b;
+      color: white;
+      align-self: flex-end;
+      border-bottom-right-radius: 2px;
+    }
+
+    .msg.bot {
+      background: #f2f1ee;
+      color: #111;
+      align-self: flex-start;
+      border-bottom-left-radius: 2px;
+    }
+
+    .msg-ref {
+      margin-top: 5px;
+      font-size: 10.5px;
+      color: #b31b1b;
+      font-style: italic;
+    }
+
+    #chat-foot {
+      padding: 8px;
+      border-top: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    #docs-note {
+      font-size: 10.5px;
+      color: #888;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 3px 0;
+    }
+
+    #chat-inp {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12.5px;
+      resize: none;
+      font-family: Arial, sans-serif;
+      height: 66px;
+    }
+    #chat-inp:focus { outline: none; border-color: #b31b1b; }
+
+    #send-btn {
+      padding: 6px;
+      background: #b31b1b;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12.5px;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+    }
+    #send-btn:hover { background: #8a1212; }
+    #send-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+    /* ── SPINNER ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(0,0,0,.15);
+      border-top-color: #b31b1b;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+    }
+    .spin.white { border-color: rgba(255,255,255,.2); border-top-color: white; }
+
+    /* ── MODAL BASE ── */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.62);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .overlay.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 5px;
+      width: 92vw;
+      height: 87vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 12px 48px rgba(0,0,0,.4);
+    }
+
+    .modal-hd {
+      padding: 11px 14px;
+      background: #b31b1b;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .modal-hd-title { font-size: 14px; font-weight: bold; font-family: Arial, sans-serif; }
+    .modal-close {
+      cursor: pointer;
+      font-size: 19px;
+      line-height: 1;
+      opacity: .8;
+      font-family: Arial, sans-serif;
+    }
+    .modal-close:hover { opacity: 1; }
+    .modal-body { flex: 1; overflow: hidden; position: relative; }
+
+    /* ── MIND MAP ── */
+    #mm-loading {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; color: #666; font-family: Arial, sans-serif; gap: 8px;
+    }
+
+    #mm-svg {
+      width: 100%; height: 100%;
+      cursor: grab;
+      display: none;
+    }
+    #mm-svg:active { cursor: grabbing; }
+
+    #mm-ctrl {
+      position: absolute;
+      bottom: 10px; right: 12px;
+      display: flex; gap: 5px;
+    }
+    .mm-btn {
+      padding: 5px 10px;
+      background: white;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: Arial, sans-serif;
+      box-shadow: 0 1px 4px rgba(0,0,0,.15);
+    }
+    .mm-btn:hover { background: #f0f0f0; }
+
+    /* ── PRESENTATION ── */
+    #pres-loading {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #1a1a1a;
+      font-size: 15px; color: #ccc; font-family: Arial, sans-serif; gap: 8px;
+    }
+
+    #pres-stage {
+      position: absolute; inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a1a;
+    }
+
+    #slide-frame {
+      width: 82%;
+      max-width: 860px;
+      aspect-ratio: 16/9;
+      background: white;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 6px 28px rgba(0,0,0,.6);
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      font-family: 'Times New Roman', serif;
+      padding: 36px 44px;
+    }
+    .slide.on { display: flex; }
+
+    .slide.title-slide {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: linear-gradient(145deg, #b31b1b, #7a1010);
+      color: white;
+    }
+    .slide.title-slide h1 { font-size: 26px; margin-bottom: 12px; line-height: 1.3; }
+    .slide.title-slide .sub { font-size: 14px; opacity: .85; margin-bottom: 8px; }
+    .slide.title-slide .gen { font-size: 11px; opacity: .55; font-style: italic; }
+
+    .slide.content-slide h2 {
+      font-size: 19px;
+      color: #b31b1b;
+      margin-bottom: 14px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid #e8e8e8;
+    }
+    .slide.content-slide ul {
+      list-style: disc;
+      padding-left: 22px;
+    }
+    .slide.content-slide li {
+      font-size: 13.5px;
+      margin-bottom: 9px;
+      line-height: 1.5;
+      color: #222;
+    }
+    .slide.content-slide .note {
+      margin-top: 14px;
+      font-size: 11.5px;
+      color: #777;
+      font-style: italic;
+    }
+
+    #pres-nav {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 14px;
+    }
+    .pnav-btn {
+      padding: 5px 14px;
+      background: rgba(255,255,255,.15);
+      color: white;
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: Arial, sans-serif;
+    }
+    .pnav-btn:hover { background: rgba(255,255,255,.25); }
+    #slide-counter { color: rgba(255,255,255,.75); font-size: 13px; font-family: Arial, sans-serif; }
+
+    /* ── SCROLLBARS ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #f0eeeb; }
+    ::-webkit-scrollbar-thumb { background: #bbb; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #999; }
+  </style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div id="header">
+  <div id="logo"><em>Work</em>LM</div>
+  <div id="api-section">
+    <span id="api-label">Gemini API Key:</span>
+    <input id="api-key-input" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false">
+    <button id="connect-btn">Connect</button>
+    <div id="api-indicator" title="Not connected"></div>
+  </div>
+</div>
+
+<!-- ══ MAIN ══ -->
+<div id="main">
+
+  <!-- Left sidebar -->
+  <div id="left-sidebar">
+    <div class="sb-head">
+      <span>Documents</span>
+      <button id="upload-btn" onclick="document.getElementById('file-input').click()">+ Upload PDF</button>
+    </div>
+    <input id="file-input" type="file" accept=".pdf" multiple>
+    <div id="doc-list">
+      <div id="no-docs">No documents yet.<br>Click <strong>+ Upload PDF</strong> to begin.</div>
+    </div>
+    <div id="tools">
+      <button class="tool-btn" onclick="openMindMap()">🗺&nbsp; Mind Map</button>
+      <button class="tool-btn" onclick="openPresentation()">📊&nbsp; Create Presentation</button>
+    </div>
+  </div>
+
+  <!-- PDF viewer -->
+  <div id="center">
+    <div id="viewer-bar">
+      <button class="vbar-btn" onclick="prevPage()">◀ Prev</button>
+      <button class="vbar-btn" onclick="nextPage()">Next ▶</button>
+      <span id="page-info">—</span>
+      <span style="flex:1"></span>
+      <button class="vbar-btn" onclick="doZoom(.8)">−</button>
+      <span id="zoom-label">100%</span>
+      <button class="vbar-btn" onclick="doZoom(1.25)">+</button>
+      <button class="vbar-btn" onclick="resetZoom()">Fit</button>
+    </div>
+    <div id="pdf-scroll">
+      <div id="empty-view">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.4">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <p style="font-size:13px;">Select or upload a PDF to view it</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat sidebar -->
+  <div id="right-sidebar">
+    <div id="chat-head">💬 WorkLM Assistant (Gemini 2.5 Flash)</div>
+    <div id="chat-msgs">
+      <div class="msg bot">
+        Hello! I'm <strong>WorkLM</strong>, your research-paper assistant powered by Gemini&nbsp;2.5&nbsp;Flash.<br><br>
+        Upload PDFs and ask me anything — I'll cite the exact page when drawing from them. Generic questions work too.
+      </div>
+    </div>
+    <div id="chat-foot">
+      <div id="docs-note">No documents loaded</div>
+      <textarea id="chat-inp" placeholder="Ask about your papers, or any question… (Enter to send, Shift+Enter for newline)" onkeydown="onChatKey(event)"></textarea>
+      <button id="send-btn" onclick="sendChat()">Send →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MIND MAP MODAL ══ -->
+<div class="overlay" id="mm-overlay">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-hd-title">🗺 Mind Map</span>
+      <span class="modal-close" onclick="closeOverlay('mm-overlay')">✕</span>
+    </div>
+    <div class="modal-body">
+      <div id="mm-loading"><span class="spin"></span> Generating mind map…</div>
+      <svg id="mm-svg"></svg>
+      <div id="mm-ctrl">
+        <button class="mm-btn" onclick="mmZoom(1.2)">＋</button>
+        <button class="mm-btn" onclick="mmZoom(0.83)">－</button>
+        <button class="mm-btn" onclick="mmReset()">⊙ Reset</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PRESENTATION MODAL ══ -->
+<div class="overlay" id="pres-overlay">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-hd-title">📊 Presentation</span>
+      <span class="modal-close" onclick="closeOverlay('pres-overlay')">✕</span>
+    </div>
+    <div class="modal-body">
+      <div id="pres-loading"><span class="spin white"></span> Generating presentation…</div>
+      <div id="pres-stage">
+        <div id="slide-frame"></div>
+        <div id="pres-nav">
+          <button class="pnav-btn" onclick="prevSlide()">◀ Prev</button>
+          <span id="slide-counter">1 / 1</span>
+          <button class="pnav-btn" onclick="nextSlide()">Next ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ─── PDF.js ─── */
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ─── App state ─── */
+let docs      = [];   // { id, name, pdf, pages, text:[{pg,text}], loading, progress }
+let activeId  = null;
+let curPage   = 1;
+let totPages  = 0;
+let zoom      = 1.0;
+let chatHist  = [];   // Gemini multi-turn history
+let apiKey    = '';
+let apiOk     = false;
+let presData  = null;
+let presCur   = 0;
+let renderTask = null;
+
+/* mind-map pan/zoom state */
+let mm = { x:0, y:0, s:1, drag:false, sx:0, sy:0 };
+
+/* ════════════════════════════════════════
+   API KEY / CONNECTION
+   ════════════════════════════════════════ */
+document.getElementById('connect-btn').addEventListener('click', async () => {
+  const k = document.getElementById('api-key-input').value.trim();
+  if (!k) { alert('Please paste your Gemini API key.'); return; }
+  apiKey = k;
+  const btn = document.getElementById('connect-btn');
+  btn.textContent = 'Connecting…'; btn.disabled = true;
+  try {
+    await geminiCall([{ role:'user', parts:[{ text:'ping' }] }], 5);
+    setApiOk(true);
+    addMsg('bot', '✅ Gemini 2.5 Flash connected! Upload research papers and ask away.');
+  } catch(e) {
+    setApiOk(false);
+    alert('Connection failed: ' + e.message);
+  }
+  btn.textContent = 'Connect'; btn.disabled = false;
+});
+
+function setApiOk(ok) {
+  apiOk = ok;
+  const el = document.getElementById('api-indicator');
+  el.title = ok ? 'API connected' : 'Not connected';
+  ok ? el.classList.add('on') : el.classList.remove('on');
+}
+
+/* ════════════════════════════════════════
+   GEMINI API WRAPPER
+   ════════════════════════════════════════ */
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+];
+
+let activeModel = GEMINI_MODELS[0];
+
+function isOverloaded(err) {
+  return /high demand|overloaded|503|quota|resource.exhausted|try again later/i.test(err);
+}
+
+async function geminiCall(contents, maxTokens = 2048, temp = 0.7, noThinking = false) {
+  /* Try each model in priority order, falling back on overload errors */
+  const startIdx = GEMINI_MODELS.indexOf(activeModel);
+  const order = [
+    ...GEMINI_MODELS.slice(startIdx),
+    ...GEMINI_MODELS.slice(0, startIdx)
+  ];
+
+  let lastErr = null;
+  for (const model of order) {
+    try {
+      const genCfg = { maxOutputTokens: maxTokens, temperature: temp };
+      /* Disable thinking for structured JSON calls — thinking tokens eat into
+         the output budget on gemini-2.5-flash and cause truncation           */
+      if (noThinking && model.startsWith('gemini-2.5')) {
+        genCfg.thinkingConfig = { thinkingBudget: 0 };
+      }
+
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents, generationConfig: genCfg })
+        }
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = err?.error?.message || `HTTP ${res.status}`;
+        if (isOverloaded(msg)) { lastErr = msg; continue; }
+        throw new Error(msg);
+      }
+
+      const d = await res.json();
+      const text = d?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
+      /* Stick with this model if it worked */
+      if (model !== activeModel) {
+        activeModel = model;
+        showModelBadge(model);
+      }
+      return text;
+    } catch (e) {
+      if (isOverloaded(e.message)) { lastErr = e.message; continue; }
+      throw e;
+    }
+  }
+  throw new Error(`All Gemini models overloaded. Last error: ${lastErr}`);
+}
+
+function showModelBadge(model) {
+  let badge = document.getElementById('model-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'model-badge';
+    badge.style.cssText =
+      'font-size:10px;background:rgba(255,255,255,.18);border-radius:3px;' +
+      'padding:2px 6px;font-family:Arial,sans-serif;color:rgba(255,255,255,.85);';
+    document.getElementById('api-section').appendChild(badge);
+  }
+  badge.textContent = '↳ ' + model;
+  badge.title = 'gemini-2.5-flash overloaded — using ' + model;
+}
+
+/* ════════════════════════════════════════
+   FILE UPLOAD & TEXT EXTRACTION
+   ════════════════════════════════════════ */
+document.getElementById('file-input').addEventListener('change', async e => {
+  for (const f of Array.from(e.target.files)) await loadDoc(f);
+  e.target.value = '';
+});
+
+async function loadDoc(file) {
+  const id   = `${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+  const name = file.name.replace(/\.pdf$/i, '');
+
+  docs.push({ id, name, pdf: null, pages: 0, text: [], loading: true, progress: 0 });
+  renderDocs();
+
+  try {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const n   = pdf.numPages;
+    const text = [];
+
+    for (let p = 1; p <= n; p++) {
+      const pg = await pdf.getPage(p);
+      const tc = await pg.getTextContent();
+      text.push({ pg: p, text: tc.items.map(i => i.str).join(' ') });
+      const d = docs.find(d => d.id === id);
+      if (d) { d.progress = p / n; renderDocs(); }
+    }
+
+    const d = docs.find(d => d.id === id);
+    if (d) { d.pdf = pdf; d.pages = n; d.text = text; d.loading = false; d.progress = 1; }
+    renderDocs();
+    updateDocsNote();
+    if (docs.filter(d => !d.loading).length === 1 && !activeId) pickDoc(id);
+  } catch(err) {
+    docs = docs.filter(d => d.id !== id);
+    renderDocs();
+    alert('Could not load ' + name + ': ' + err.message);
+  }
+}
+
+function renderDocs() {
+  const list = document.getElementById('doc-list');
+  if (!docs.length) {
+    list.innerHTML = '<div id="no-docs">No documents yet.<br>Click <strong>+ Upload PDF</strong> to begin.</div>';
+    return;
+  }
+  list.innerHTML = docs.map(d => `
+    <div class="doc-item ${d.id === activeId ? 'active' : ''}" onclick="pickDoc('${d.id}')">
+      <span class="doc-icon">📄</span>
+      <div class="doc-info">
+        <div class="doc-name">${esc(d.name)}</div>
+        <div class="doc-meta">${d.loading
+          ? `<span class="doc-status">Extracting… ${Math.round((d.progress||0)*100)}%</span>`
+          : `${d.pages} page${d.pages !== 1 ? 's' : ''}`
+        }</div>
+        ${d.loading
+          ? `<div class="doc-progress"><div class="doc-progress-fill" style="width:${Math.round((d.progress||0)*100)}%"></div></div>`
+          : ''
+        }
+      </div>
+      <span class="doc-del" onclick="event.stopPropagation();removeDoc('${d.id}')" title="Remove">✕</span>
+    </div>
+  `).join('');
+}
+
+function pickDoc(id) {
+  const d = docs.find(d => d.id === id);
+  if (!d || d.loading) return;
+  activeId = id; curPage = 1; totPages = d.pages; zoom = 1.0;
+  renderDocs();
+  renderPage();
+}
+
+function removeDoc(id) {
+  docs = docs.filter(d => d.id !== id);
+  if (activeId === id) {
+    const next = docs.find(d => !d.loading);
+    activeId = next ? next.id : null;
+    if (activeId) pickDoc(activeId); else showEmpty();
+  }
+  renderDocs();
+  updateDocsNote();
+}
+
+function showEmpty() {
+  document.getElementById('pdf-scroll').innerHTML = `
+    <div id="empty-view">
+      <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.4">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <p style="font-size:13px;">Select or upload a PDF to view it</p>
+    </div>`;
+  document.getElementById('page-info').textContent  = '—';
+  document.getElementById('zoom-label').textContent = '100%';
+}
+
+function updateDocsNote() {
+  const n = docs.filter(d => !d.loading).length;
+  document.getElementById('docs-note').textContent =
+    n ? `${n} document${n > 1 ? 's' : ''} loaded` : 'No documents loaded';
+}
+
+/* ════════════════════════════════════════
+   PDF RENDERING
+   ════════════════════════════════════════ */
+async function renderPage() {
+  const d = docs.find(d => d.id === activeId);
+  if (!d || !d.pdf) return;
+
+  if (renderTask) { try { renderTask.cancel(); } catch(_) {} renderTask = null; }
+
+  const page     = await d.pdf.getPage(curPage);
+  const viewport = page.getViewport({ scale: zoom * 1.5 });
+
+  const scroll = document.getElementById('pdf-scroll');
+  scroll.innerHTML = '';
+
+  const wrap   = document.createElement('div');
+  wrap.className = 'pdf-canvas-wrap';
+  const canvas = document.createElement('canvas');
+  canvas.width  = viewport.width;
+  canvas.height = viewport.height;
+  wrap.appendChild(canvas);
+  scroll.appendChild(wrap);
+
+  const ctx = canvas.getContext('2d');
+  renderTask = page.render({ canvasContext: ctx, viewport });
+  try {
+    await renderTask.promise;
+  } catch(_) {}
+  renderTask = null;
+
+  document.getElementById('page-info').textContent  = `Page ${curPage} / ${totPages}`;
+  document.getElementById('zoom-label').textContent = Math.round(zoom * 100) + '%';
+}
+
+function prevPage()  { if (curPage > 1)       { curPage--;  renderPage(); } }
+function nextPage()  { if (curPage < totPages) { curPage++;  renderPage(); } }
+function doZoom(f)   { zoom = Math.min(Math.max(zoom * f, 0.25), 5); renderPage(); }
+function resetZoom() { zoom = 1.0; renderPage(); }
+
+/* ════════════════════════════════════════
+   CHAT
+   ════════════════════════════════════════ */
+function onChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+}
+
+function addMsg(role, html, ref) {
+  const box = document.getElementById('chat-msgs');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML  = fmtMd(html);
+  if (ref) {
+    const r = document.createElement('div');
+    r.className   = 'msg-ref';
+    r.textContent = '📑 ' + ref;
+    div.appendChild(r);
+  }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+async function sendChat() {
+  if (!apiOk) { alert('Connect your Gemini API key first.'); return; }
+  const inp  = document.getElementById('chat-inp');
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+  document.getElementById('send-btn').disabled = true;
+
+  addMsg('user', text);
+
+  /* thinking indicator */
+  const spin = document.createElement('div');
+  spin.className = 'msg bot';
+  spin.innerHTML  = '<span class="spin"></span> Thinking…';
+  document.getElementById('chat-msgs').appendChild(spin);
+  document.getElementById('chat-msgs').scrollTop = 99999;
+
+  try {
+    const ready = docs.filter(d => !d.loading && d.text.length);
+
+    /* Build system context */
+    let sys = ready.length
+      ? buildDocContext(ready)
+      : 'You are WorkLM, a helpful research assistant. No papers are currently loaded. Answer the question helpfully.\n';
+
+    const contents = [
+      ...chatHist,
+      { role: 'user', parts: [{ text: sys + '\nUser question: ' + text }] }
+    ];
+
+    const reply = await geminiCall(contents, 2048, 0.7);
+    spin.remove();
+
+    /* Extract page citation */
+    const m = reply.match(/\[Pages?:?\s*([\d,\s\-\u2013]+)\]/i);
+    let ref = null, clean = reply;
+    if (m) {
+      const pages = m[1].trim();
+      ref   = `Source — Page${pages.match(/[,\-\u2013]/) ? 's' : ''} ${pages}`;
+      clean = reply.replace(m[0], '').trim();
+    }
+    addMsg('bot', clean, ref);
+
+    chatHist.push({ role: 'user',  parts: [{ text }] });
+    chatHist.push({ role: 'model', parts: [{ text: reply }] });
+
+  } catch(e) {
+    spin.remove();
+    addMsg('bot', '❌ Error: ' + esc(e.message));
+  }
+  document.getElementById('send-btn').disabled = false;
+}
+
+function buildDocContext(ready) {
+  let s = `You are WorkLM, an expert research-paper assistant.
+The user has uploaded ${ready.length} research paper(s). Their extracted text follows (labelled by page number).
+
+RULES:
+1. If the question is about the uploaded documents: answer from the content and end your response with a page citation in the format [Page: X] or [Pages: X, Y].
+2. If the question is clearly generic / unrelated to the papers: answer helpfully, NO citation needed.
+3. Be concise and accurate. Use **bold** and bullet points where helpful.
+
+`;
+  for (const d of ready) {
+    s += `=== "${d.name}" (${d.pages} pages) ===\n`;
+    for (const pg of d.text) {
+      if (pg.text.trim()) s += `[Page ${pg.pg}]: ${pg.text.slice(0, 900)}\n`;
+    }
+    s += '\n';
+  }
+  return s;
+}
+
+/* ════════════════════════════════════════
+   MIND MAP
+   ════════════════════════════════════════ */
+async function openMindMap() {
+  if (!docs.filter(d => !d.loading).length) {
+    alert('Upload at least one document first.'); return;
+  }
+  if (!apiOk) { alert('Connect your Gemini API key first.'); return; }
+
+  document.getElementById('mm-overlay').classList.add('open');
+  const loading = document.getElementById('mm-loading');
+  const svgEl   = document.getElementById('mm-svg');
+  loading.innerHTML = '<span class="spin"></span> Generating mind map…';
+  loading.style.display = 'flex';
+  svgEl.style.display   = 'none';
+
+  try {
+    const tree = await fetchMindMapJSON();
+    drawMindMap(tree);
+    loading.style.display = 'none';
+    svgEl.style.display   = 'block';
+  } catch(e) {
+    loading.innerHTML = '❌ ' + esc(e.message);
+  }
+}
+
+async function fetchMindMapJSON() {
+  /* Keep context tight — 800 chars per doc prevents input from consuming
+     the output token budget and causing truncation                        */
+  let ctx = '';
+  for (const d of docs.filter(d => !d.loading)) {
+    const snippet = d.text.slice(0, 4).map(p => p.text).join(' ').slice(0, 800);
+    ctx += `"${d.name}": ${snippet}\n\n`;
+  }
+
+  const prompt = `Create a mind map for these research paper(s).
+
+${ctx}
+
+Return ONLY a JSON object, no markdown, no explanation:
+{"root":{"label":"<3-4 word topic>","children":[{"label":"<branch>","children":[{"label":"<leaf>","children":[]},{"label":"<leaf>","children":[]}]},{"label":"<branch>","children":[{"label":"<leaf>","children":[]},{"label":"<leaf>","children":[]}]}]}}
+
+Rules: 4-5 main branches, 2-3 leaves each. Labels ≤ 5 words. No "desc" fields needed.`;
+
+  const raw = await geminiCall([{ role:'user', parts:[{ text: prompt }] }], 2000, 0.2, true);
+  return safeParseJSON(raw);
+}
+
+function drawMindMap(data) {
+  const svgEl = document.getElementById('mm-svg');
+  const W = svgEl.clientWidth  || 900;
+  const H = svgEl.clientHeight || 520;
+  svgEl.innerHTML = '';
+  mm = { x: W/2, y: H/2, s: 1, drag: false, sx: 0, sy: 0 };
+
+  const g = mkSVG('g');
+  g.id = 'mm-g';
+  svgEl.appendChild(g);
+
+  const nodes = [], edges = [];
+
+  function layout(node, x, y, level, a0, a1, pid) {
+    const id = nodes.length;
+    nodes.push({ id, label: node.label||'', desc: node.desc||'', x, y, level });
+    if (pid !== null) edges.push([pid, id]);
+    if (node.children?.length) {
+      const radii = [0, 175, 290, 380];
+      const r = radii[Math.min(level, 3)];
+      node.children.forEach((c, i) => {
+        const a  = a0 + (a1 - a0) * (i + .5) / node.children.length;
+        const sp = (a1 - a0) / node.children.length;
+        layout(c, x + r * Math.cos(a), y + r * Math.sin(a), level + 1, a - sp/2, a + sp/2, id);
+      });
+    }
+  }
+  layout(data.root, 0, 0, 0, 0, Math.PI * 2, null);
+
+  /* ── draw edges ── */
+  edges.forEach(([fi, ti]) => {
+    const f = nodes[fi], t = nodes[ti];
+    const dx = (t.x - f.x) * .5;
+    const p  = mkSVG('path');
+    p.setAttribute('d', `M${f.x} ${f.y} C${f.x+dx} ${f.y},${t.x-dx} ${t.y},${t.x} ${t.y}`);
+    p.setAttribute('stroke', '#b31b1b');
+    p.setAttribute('stroke-width', t.level <= 1 ? '2' : '1.5');
+    p.setAttribute('fill', 'none');
+    p.setAttribute('opacity', '0.38');
+    g.appendChild(p);
+  });
+
+  /* ── draw nodes ── */
+  const COLORS = ['#b31b1b','#9a1717','#c03030','#555'];
+  const RX     = [66, 52, 40, 32];
+  const FS     = [11, 10, 9, 8];
+
+  nodes.forEach(nd => {
+    const ng = mkSVG('g');
+    ng.setAttribute('transform', `translate(${nd.x},${nd.y})`);
+
+    const rx = RX[Math.min(nd.level, 3)];
+    const ry = Math.round(rx * .52);
+    const fs = FS[Math.min(nd.level, 3)];
+
+    const el = mkSVG('ellipse');
+    el.setAttribute('rx', rx); el.setAttribute('ry', ry);
+    el.setAttribute('fill', COLORS[Math.min(nd.level,3)]);
+    el.setAttribute('stroke','white'); el.setAttribute('stroke-width','1.5');
+    ng.appendChild(el);
+
+    /* label — wrap into ≤2 lines */
+    const words = nd.label.split(' ');
+    const mid   = Math.ceil(words.length / 2);
+    const lbl   = mkSVG('text');
+    lbl.setAttribute('text-anchor','middle');
+    lbl.setAttribute('fill','white');
+    lbl.setAttribute('font-size', fs);
+    lbl.setAttribute('font-weight','bold');
+    lbl.setAttribute('font-family','Arial,sans-serif');
+
+    if (words.length > 2 || nd.label.length > 13) {
+      const t1 = mkSVG('tspan');
+      t1.setAttribute('x','0'); t1.setAttribute('dy', `-${Math.round(fs*.55)}`);
+      t1.textContent = words.slice(0, mid).join(' ');
+      const t2 = mkSVG('tspan');
+      t2.setAttribute('x','0'); t2.setAttribute('dy', `${Math.round(fs*1.3)}`);
+      t2.textContent = words.slice(mid).join(' ');
+      lbl.appendChild(t1); lbl.appendChild(t2);
+    } else {
+      lbl.setAttribute('dominant-baseline','central');
+      lbl.textContent = nd.label;
+    }
+    ng.appendChild(lbl);
+
+    /* description tooltip on hover */
+    if (nd.desc) {
+      const tt  = mkSVG('g');
+      tt.style.display = 'none';
+      tt.setAttribute('transform', `translate(0,${ry + 8})`);
+
+      const lines = wrapText(nd.desc.length > 96 ? nd.desc.slice(0,96)+'…' : nd.desc, 30);
+      const TW = 180, TH = lines.length * 13 + 10;
+
+      const bg = mkSVG('rect');
+      bg.setAttribute('x', -(TW/2)); bg.setAttribute('y', -4);
+      bg.setAttribute('width', TW);  bg.setAttribute('height', TH);
+      bg.setAttribute('rx','3');     bg.setAttribute('fill','rgba(18,18,18,.87)');
+      tt.appendChild(bg);
+
+      lines.forEach((line, i) => {
+        const t = mkSVG('text');
+        t.setAttribute('text-anchor','middle'); t.setAttribute('x','0');
+        t.setAttribute('y', i * 13 + 7);
+        t.setAttribute('fill','white'); t.setAttribute('font-size','8.5');
+        t.setAttribute('font-family','Arial,sans-serif');
+        t.textContent = line;
+        tt.appendChild(t);
+      });
+
+      ng.appendChild(tt);
+      ng.addEventListener('mouseenter', () => { tt.style.display = 'block'; });
+      ng.addEventListener('mouseleave', () => { tt.style.display = 'none';  });
+    }
+
+    g.appendChild(ng);
+  });
+
+  applyMM();
+  bindMMInteraction();
+}
+
+function applyMM() {
+  const g = document.getElementById('mm-g');
+  if (g) g.setAttribute('transform', `translate(${mm.x},${mm.y}) scale(${mm.s})`);
+}
+
+function mmZoom(f) {
+  mm.s = Math.max(.15, Math.min(mm.s * f, 4.5));
+  applyMM();
+}
+
+function mmReset() {
+  const svgEl = document.getElementById('mm-svg');
+  mm.x = svgEl.clientWidth / 2;
+  mm.y = svgEl.clientHeight / 2;
+  mm.s = 1;
+  applyMM();
+}
+
+function bindMMInteraction() {
+  const svgEl = document.getElementById('mm-svg');
+
+  svgEl.addEventListener('mousedown', e => {
+    mm.drag = true;
+    mm.sx   = e.clientX - mm.x;
+    mm.sy   = e.clientY - mm.y;
+  });
+  svgEl.addEventListener('mousemove', e => {
+    if (!mm.drag) return;
+    mm.x = e.clientX - mm.sx;
+    mm.y = e.clientY - mm.sy;
+    applyMM();
+  });
+  svgEl.addEventListener('mouseup',    () => { mm.drag = false; });
+  svgEl.addEventListener('mouseleave', () => { mm.drag = false; });
+
+  svgEl.addEventListener('wheel', e => {
+    e.preventDefault();
+    const f    = e.deltaY < 0 ? 1.1 : 0.91;
+    const rect = svgEl.getBoundingClientRect();
+    const mx   = e.clientX - rect.left;
+    const my   = e.clientY - rect.top;
+    mm.x = mx + (mm.x - mx) * f;
+    mm.y = my + (mm.y - my) * f;
+    mm.s = Math.max(.15, Math.min(mm.s * f, 4.5));
+    applyMM();
+  }, { passive: false });
+
+  /* Touch support */
+  let lastTouchDist = 0;
+  svgEl.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      mm.drag = true;
+      mm.sx = e.touches[0].clientX - mm.x;
+      mm.sy = e.touches[0].clientY - mm.y;
+    } else if (e.touches.length === 2) {
+      lastTouchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: true });
+  svgEl.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && mm.drag) {
+      mm.x = e.touches[0].clientX - mm.sx;
+      mm.y = e.touches[0].clientY - mm.sy;
+      applyMM();
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      mmZoom(dist / lastTouchDist);
+      lastTouchDist = dist;
+    }
+  }, { passive: false });
+  svgEl.addEventListener('touchend', () => { mm.drag = false; });
+}
+
+/* ════════════════════════════════════════
+   PRESENTATION
+   ════════════════════════════════════════ */
+async function openPresentation() {
+  if (!docs.filter(d => !d.loading).length) {
+    alert('Upload at least one document first.'); return;
+  }
+  if (!apiOk) { alert('Connect your Gemini API key first.'); return; }
+
+  document.getElementById('pres-overlay').classList.add('open');
+  const loading = document.getElementById('pres-loading');
+  const stage   = document.getElementById('pres-stage');
+  loading.innerHTML = '<span class="spin white"></span> Generating presentation…';
+  loading.style.display = 'flex';
+  stage.style.display   = 'none';
+
+  try {
+    presData = await fetchPresentationJSON();
+    buildSlides();
+    presCur = 0;
+    showSlide(0);
+    loading.style.display = 'none';
+    stage.style.display   = 'flex';
+  } catch(e) {
+    loading.innerHTML = `<span style="color:#f88;">❌ ${esc(e.message)}</span>`;
+  }
+}
+
+async function fetchPresentationJSON() {
+  /* Tight context budget — 1000 chars per doc max */
+  let ctx = '';
+  for (const d of docs.filter(d => !d.loading)) {
+    const snippet = d.text.slice(0, 5).map(p => p.text).join(' ').slice(0, 1000);
+    ctx += `"${d.name}": ${snippet}\n\n`;
+  }
+
+  const prompt = `Create an academic presentation outline for these paper(s):
+
+${ctx}
+
+Return ONLY a JSON object (no markdown, no extra text):
+{"title":"<title>","subtitle":"<subtitle>","slides":[{"title":"Introduction","bullets":["<bullet>","<bullet>","<bullet>"]},{"title":"Background","bullets":["<bullet>","<bullet>","<bullet>"]},{"title":"Key Concepts","bullets":["<bullet>","<bullet>","<bullet>"]},{"title":"Methodology","bullets":["<bullet>","<bullet>","<bullet>"]},{"title":"Results","bullets":["<bullet>","<bullet>","<bullet>"]},{"title":"Conclusion","bullets":["<bullet>","<bullet>","<bullet>"]}]}
+
+Rules: exactly 6 slides, exactly 3 bullets each, each bullet ≤ 8 words, no "note" field.`;
+
+  const raw = await geminiCall([{ role:'user', parts:[{ text: prompt }] }], 2000, 0.2, true);
+  return safeParseJSON(raw);
+}
+
+function buildSlides() {
+  const frame = document.getElementById('slide-frame');
+  frame.innerHTML = '';
+
+  /* Title slide */
+  const ts = document.createElement('div');
+  ts.className = 'slide title-slide on';
+  ts.innerHTML = `
+    <h1>${esc(presData.title)}</h1>
+    <p class="sub">${esc(presData.subtitle || '')}</p>
+    <p class="gen">Generated by WorkLM &middot; Gemini 2.5 Flash</p>`;
+  frame.appendChild(ts);
+
+  /* Content slides */
+  (presData.slides || []).forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'slide content-slide';
+    div.innerHTML = `
+      <h2>${esc(s.title)}</h2>
+      <ul>${(s.bullets||[]).map(b => `<li>${esc(b)}</li>`).join('')}</ul>
+      ${s.note ? `<p class="note">${esc(s.note)}</p>` : ''}`;
+    frame.appendChild(div);
+  });
+}
+
+function showSlide(i) {
+  const all = document.querySelectorAll('#slide-frame .slide');
+  if (!all.length) return;
+  all.forEach((s, idx) => s.classList.toggle('on', idx === i));
+  presCur = i;
+  document.getElementById('slide-counter').textContent = `${i + 1} / ${all.length}`;
+}
+function prevSlide() { if (presCur > 0) showSlide(presCur - 1); }
+function nextSlide() {
+  const n = document.querySelectorAll('#slide-frame .slide').length;
+  if (presCur < n - 1) showSlide(presCur + 1);
+}
+
+/* ════════════════════════════════════════
+   MODAL OVERLAY
+   ════════════════════════════════════════ */
+function closeOverlay(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.querySelectorAll('.overlay').forEach(ov =>
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('open'); })
+);
+
+/* ════════════════════════════════════════
+   KEYBOARD SHORTCUTS
+   ════════════════════════════════════════ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open'));
+  }
+  if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.key === 'ArrowLeft')  prevPage();
+  if (e.key === 'ArrowRight') nextPage();
+});
+
+/* ════════════════════════════════════════
+   UTILITIES
+   ════════════════════════════════════════ */
+
+/* Robustly parse JSON from a Gemini response that may include:
+   - markdown code fences, smart/curly quotes, trailing commas
+   - literal newlines / control chars inside string values
+   - extra text before/after the JSON object                      */
+function safeParseJSON(raw) {
+  let s = raw || '';
+
+  /* 1. Strip markdown fences */
+  s = s.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+
+  /* 2. Replace smart / curly quotes with straight ASCII quotes */
+  s = s
+    .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
+
+  /* 3. Extract the first complete {...} block with brace-depth counting.
+        While scanning, also fix literal control characters inside strings. */
+  const start = s.indexOf('{');
+  if (start === -1) throw new Error('No JSON object found in model response');
+
+  let out = '', depth = 0, inStr = false, escaped = false, end = -1;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    const code = s.charCodeAt(i);
+
+    if (escaped) {
+      escaped = false;
+      out += c;
+      continue;
+    }
+
+    if (c === '\\' && inStr) {
+      escaped = true;
+      out += c;
+      continue;
+    }
+
+    if (c === '"') {
+      inStr = !inStr;
+      out += c;
+      continue;
+    }
+
+    if (inStr) {
+      /* Fix bare control characters that make JSON invalid */
+      if (code === 0x0A) { out += '\\n';  continue; }   // newline
+      if (code === 0x0D) { out += '\\r';  continue; }   // carriage return
+      if (code === 0x09) { out += '\\t';  continue; }   // tab
+      if (code < 0x20)  { out += ' ';    continue; }   // other controls → space
+      out += c;
+      continue;
+    }
+
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) { out += c; end = i; break; }
+    }
+    out += c;
+  }
+
+  if (end === -1) throw new Error('JSON object is incomplete — model response was truncated');
+
+  /* 4. Remove trailing commas before } or ] (common Gemini quirk) */
+  out = out.replace(/,\s*([}\]])/g, '$1');
+
+  try {
+    return JSON.parse(out);
+  } catch (e) {
+    throw new Error(`JSON parse failed: ${e.message}`);
+  }
+}
+
+function mkSVG(tag) {
+  return document.createElementNS('http://www.w3.org/2000/svg', tag);
+}
+
+function esc(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtMd(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g,'<em>$1</em>')
+    .replace(/`([^`]+)`/g,'<code style="background:#e3e3e3;padding:1px 4px;border-radius:2px;font-size:11px">$1</code>')
+    .replace(/\n/g,'<br>');
+}
+
+function wrapText(str, maxChars) {
+  const lines = [];
+  let cur = '';
+  str.split(' ').forEach(w => {
+    if ((cur + ' ' + w).trim().length > maxChars) { lines.push(cur.trim()); cur = w; }
+    else cur = (cur + ' ' + w).trim();
+  });
+  if (cur) lines.push(cur.trim());
+  return lines;
+}
+</script>
+</body>
+</html>
